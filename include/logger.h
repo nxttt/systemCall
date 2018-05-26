@@ -1,6 +1,16 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
+#include <sys/ipc.h>
+#include <string.h>
+#include <sys/msg.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+
+
 /// @file
 
 /// @defgroup logger
