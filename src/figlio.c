@@ -1,16 +1,7 @@
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <sys/sem.h>
-#include <sys/shm.h>
-#include <stdlib.h>		//malloc, exit
-#include <stdio.h>		//perror, printf, sprintf
-#include <wait.h>			//SIGUSR1, signal
-#include <unistd.h>		//fork, pause, write
-//#include <string.h>		//strcpy
-
 #include "../include/figlio.h"
 #include "../include/types.h"
 #include "../include/nipote.h"
+#include "../include/utili.h"
 
 #define MSGKEY   90
 #define SHMKEYS1 7777
@@ -18,19 +9,10 @@
 
 #define SEMKEY 14
 
-// 						EXTRA
-
-//dato un intero ne calcola le cifre
-int countCifre(int i);
-
-//Copia una stringa da src a dest
-void copiaStr(char *dest, const char *src);
-
-
 //						CONSEGNA
 
 //deposita il messaggio di terminazione nella coda di messaggi del processo logger
-void send_terminate();
+void send_terminate(int msgid);
 
 //signal handler del segnale SIGUSR1
 void status_updated(int currentSignal);
@@ -40,7 +22,9 @@ void status_updated(int currentSignal);
 
 //						VARIABILI GLOBALI
 
-int shmid;					//id della shmem
+int shmid1;					//id della shmem s1
+int shmid2;
+int msgid;
 int size;						//size della struttura Status
 char *shm;					//shmem address
 struct Status *st; 	//puntatore allo status in memoria
@@ -50,21 +34,38 @@ int semid;					//id del semaforo
 
 
 //wrapper del processo figlio, riceve in input la size del buffer s1
-void figlio(int s1Size){
+
+//CONTROLLARE COME LA FORK GESTISCE L'ATTACHED MEMORY DEL PADRE
+void figlio(struct Shmem* s1, int s1Size, struct Shmem* s2, int s2Size, int nStrings){
+	
+	if((msgid = msgget(MSGKEY, 0666)) == -1) {
+		perror("Coda di messaggi non esistente");
+		exit(1);
+	}
 	
 	int status1, status2;
 	
+	// Questa parte sotto non serve se la memoria attached e' condivisa tra padre e figlio
+	
+	/*
 	//Setup zona condivisa
 	size = sizeof(struct Status);
 	//Ricerca zona condivisa
-	if ((shmid = shmget(SHMKEYS1, s1Size, 0666)) < 0) {
+	if ((shmid1 = shmget(SHMKEYS1, s1Size, 0666)) < 0) {
+        perror("shmget");
+        exit(1);
+  if ((shmid2 = shmget(SHMKEYS2, s2Size, 0666)) < 0) {
         perror("shmget");
         exit(1);
   }//Attach zona condivisa
-	if ((shm = shmat(shmid, NULL, 0)) == (char *) -1) {
+	if ((shm = shmat(shmid1, NULL, 0)) == (char *) -1) {
         perror("shmat");
         exit(1);
   }
+	*/
+	
+	
+	st = (struct Status *) (s1->addr);
 			
 	//Creazione semaforo per figli
 	int semid;
@@ -88,6 +89,7 @@ void figlio(int s1Size){
 	
 	/*
 		Crea i vari nipoti
+		Se La memoria condivisa e' condivisa tra padre e figli, basta passargli la struttura s1/s2 (?)
 	*/
 	pid1 = fork(); //Primo nipote
 	if(pid1 == -1){
@@ -97,7 +99,8 @@ void figlio(int s1Size){
 	}
 	
 	if(pid1 == 0){	//Se sono il nipote appena creato
-		//nipote(semid);
+		nipote(shmid1, shmid2, nStrings, 1, msgid);
+		//nipote(shmid1, shmid2, nStrings, 1, semid, msgid);
 		exit(0);
 	}		
 	//se sono il padre
@@ -109,7 +112,8 @@ void figlio(int s1Size){
 	}
 	
 	if(pid2 == 0){	//Se sono il secondo nipote appena creato
-		//nipote();
+		nipote(shmid1, shmid2, nStrings, 2, msgid);
+		//nipote(shmid1, shmid2, nStrings, 2, semid, msgid);
 		exit(0);
 	}
 	
@@ -135,7 +139,7 @@ void figlio(int s1Size){
 	semctl(semid, 0, IPC_RMID);
 	free((struct sembuf*)sops);
 		
-	send_terminate();
+	send_terminate(msgid);
 }
 
 
@@ -147,19 +151,19 @@ void figlio(int s1Size){
 //signal handler
 void status_updated(int currentSignal){
 	write(1, "Il nipote ", 10);
-	int cif = countCifre(t->id);
+	int cif = countCifre(st->grandson);
 	char c[cif];
-	write(1, intToChar(t->id, cif, c), cif);
+	write(1, intToChar(st->grandson, cif, c), cif);
 	write(1, " sta analizzando la ", 20);
-	cif = countCifre(t->sid);
+	cif = countCifre(st->id_string);
 	char d[cif];
-	write(1, intToChar(t->id, cif, d), cif);
+	write(1, intToChar(st->id_string, cif, d), cif);
 	write(1, "-esima stringa.\n", 16);
 }
 
-void send_terminate(){
+void send_terminate(int msgid){
 
-	int msgid;
+	//int msgid;
 	
 	/*
 		puntatore alla struttura che rappresenta il messaggio.
@@ -169,12 +173,6 @@ void send_terminate(){
 
 	/* allocazione memoria per il messaggio */
 	m = (struct Message *) malloc(sizeof(struct Message));
-	
-	if((msgid = msgget(MSGKEY, 0666)) == -1) {
-		perror("Coda di messaggi non esistente");
-		free((struct Message *)m);//libero la malloc prima di uscire
-		exit(1);
-	}
 	
 	const unsigned msg_size = sizeof(struct Message) - sizeof(long);
 	/* creazione del messaggio da inviare */
@@ -188,18 +186,3 @@ void send_terminate(){
 	}
 	free((struct Message *)m);//libero la malloc prima di uscire
 }
-
-int countCifre(int i){
-	int c = 0;
-	while (i!=0){
-		c++;
-		i=i/10;
-	}
-	return c;
-}
-
-void copiaStr(char *dest, const char *src){
-   char *save = dest;
-   while(*dest++ = *src++);
-}
-

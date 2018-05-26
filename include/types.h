@@ -1,3 +1,6 @@
+#ifndef TYPES_H
+#define TYPES_H
+
 /// @file
 
 /// @{
@@ -26,4 +29,14 @@ struct Shmem{
 	void* addr; 	///< Spazio indirizzamento
 };
 
+/**
+ *	@brief	Struttura per leggere dal file di input il plain_text e encoded_text in load_string
+ */
+struct Spek{
+	char * plain_text[256];
+	char * encoded_text[256];
+};
+
 /// @}
+
+#endif

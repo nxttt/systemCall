@@ -1,25 +1,45 @@
 #ifndef NIPOTE_H
 #define NIPOTE_H
 
-//wrapper del processo nipote
-void nipote();
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+#include <sys/sem.h>
+#include <sys/msg.h>
+#include <stdio.h>		//perror, printf, sprintf
+#include <stdlib.h>		//malloc, exit
 
-//legge la stringa dal segmento S1
-void load_string();
+// EXTRA
+
+
+
+// EXTRA
+
+
+//wrapper del processo nipote
+void nipote(int shmid1, int shmid2, int nstrings, int x, int msgid);
+
+// Ritorna una struttura con testo plain e testo criptato, prendendo in input l' id della stringa da esaminare e l'indirizzo della shared memory
+struct Spek* load_string(int mystring, void * addr);
 
 //blocca accesso esclusivo regione critica
-void lock();
+int lock();
 
 //sblocca accesso esclusivo regione critica
-void unlock();
+int unlock();
 
-//trova la chiave
-void find_key();
+// Trova la chiave utilizzata per criptare plain_text in encoded_text
+unsigned find_key(char * plain_text, char * encoded_text);
 
-//deposita il messaggio "chiave trovate/secondi" nella coda di messaggi del processo logger
-void send_timeelapsed();
+// Scrive in quanto tempo ha trovato la chiave
+void send_timeelapsed(char * string, int coda);
 
-//salva la chiave nel segmento S2
-void save_key();
+// Scrive la chiave nella shared_memory2 (int mystring, int dhmid2, unsigned key)
+void save_key(int mystring, void *shm2, unsigned key);
 
 #endif
